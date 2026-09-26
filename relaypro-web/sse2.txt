@@ -1,0 +1,10 @@
+: connected
+
+data: {"type":"call_started"}
+
+data: {"type":"utterance","speaker":"agent","text":"hello world"}
+
+data: {"type":"utterance","speaker":"human","text":"hi there"}
+
+data: {"type":"dtmf","digits":"5"}
+

@@ -30,7 +30,7 @@ export function Landing({
     <main className="flex flex-1 items-center justify-center px-5 py-12">
       <div className="w-full max-w-2xl">
         <p className="view-enter hero-sub mb-3 text-center">
-          Decibels places the call and shows you every word.
+          Decibels, an ADA compliant tool to make your calls.
         </p>
 
         <h1 className="view-enter stagger-1 hero-title mb-9 text-center">
