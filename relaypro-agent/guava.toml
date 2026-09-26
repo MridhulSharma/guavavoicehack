@@ -1,0 +1,9 @@
+project_id = "gp-68932563-17f7-4ec0-904e-7121d796e9e5"
+org_id = "6ab7f4cf7b00c3f140ce5686"
+name = "relaypro-agent"
+call_direction = "outbound"
+base_image = "python-sandbox:3.14"
+phone_number = "+14847408803"
+tier = "guava-seed"
+replicas = 1
+enable_healthcheck = true

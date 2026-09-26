@@ -1,0 +1,9 @@
+# RelayPro
+.env
+.env.local
+relaypro-agent/.env
+relaypro-web/.env
+relaypro-web/.next/
+relaypro-web/node_modules/
+relaypro-agent/__pycache__/
+relaypro-agent/.venv/
