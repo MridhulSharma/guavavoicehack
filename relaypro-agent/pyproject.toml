@@ -2,4 +2,12 @@
 name = "relaypro-agent"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["guava-sdk", "typing_extensions"]
+dependencies = [
+    "anthropic>=1.8.0",
+    "fastapi>=0.141.1",
+    "guava-sdk",
+    "httpx>=0.28.1",
+    "python-dotenv>=1.2.3",
+    "typing_extensions",
+    "uvicorn>=0.54.0",
+]

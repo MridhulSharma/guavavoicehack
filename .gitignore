@@ -7,3 +7,5 @@ relaypro-web/.next/
 relaypro-web/node_modules/
 relaypro-agent/__pycache__/
 relaypro-agent/.venv/
+__pycache__/
+*.pyc
