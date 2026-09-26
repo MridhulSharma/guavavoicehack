@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { Backdrop } from "@/app/components/Backdrop";
+import { Landing } from "@/app/components/Landing";
+import { ThemeToggle } from "@/app/components/ThemeToggle";
 import type { CallGoal, CallSummary, RelayEvent } from "@/app/lib/types";
 
 /**
@@ -35,6 +38,8 @@ export default function Home() {
   const [nudgeText, setNudgeText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  // The greeting view comes first; submitting the objective reveals the call UI.
+  const [view, setView] = useState<"landing" | "app">("landing");
 
   const transcriptRef = useRef<HTMLDivElement>(null);
 
@@ -69,10 +74,13 @@ export default function Home() {
     return () => source.close();
   }, []);
 
+  // `view` is a dependency because the transcript element only exists in the
+  // app view: without it, events that arrived during the landing view would
+  // render already scrolled to the top.
   useEffect(() => {
     const el = transcriptRef.current;
     if (el) el.scrollTo(0, el.scrollHeight);
-  }, [events]);
+  }, [events, view]);
 
   async function startCall() {
     setError(null);
@@ -126,140 +134,203 @@ export default function Home() {
   const canStart =
     phone.trim().length > 0 && objective.trim().length > 0 && !starting;
 
+  /** Landing submit: reveal the call UI, then fire the unchanged startCall. */
+  function startFromLanding() {
+    setView("app");
+    void startCall();
+  }
+
   return (
-    <div className="flex h-screen flex-col bg-white text-slate-900">
-      {/* TOP - goal input */}
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-6 py-4">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-end gap-3">
-          <div className="flex flex-col">
-            <span className="text-lg font-semibold tracking-tight">RelayPro</span>
-            <span className="text-xs text-slate-500">
-              {isCalling ? "call live" : "idle"}
-            </span>
-          </div>
-          <label className="flex flex-col text-xs font-medium text-slate-600">
-            Phone number
-            <input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+15551234567"
-              className="mt-1 w-44 rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500"
+    <>
+      <Backdrop live={isCalling} />
+
+      <div className="app-shell flex h-screen flex-col">
+        {view === "landing" ? (
+          <>
+            <header className="flex items-center justify-between px-5 py-4">
+              <Brand isCalling={isCalling} showStatus={false} />
+              <ThemeToggle />
+            </header>
+
+            <Landing
+              phone={phone}
+              onPhoneChange={setPhone}
+              objective={objective}
+              onObjectiveChange={setObjective}
+              onStart={startFromLanding}
+              canStart={canStart}
+              starting={starting}
+              error={error}
             />
-          </label>
-          <label className="flex min-w-64 flex-1 flex-col text-xs font-medium text-slate-600">
-            What should the agent accomplish?
-            <input
-              value={objective}
-              onChange={(e) => setObjective(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && canStart) startCall();
-              }}
-              placeholder="Confirm you can hear me and ask what the weather is"
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500"
-            />
-          </label>
-          <button
-            onClick={startCall}
-            disabled={!canStart}
-            className="rounded bg-blue-600 px-5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
-            {starting ? "Starting..." : "Start"}
-          </button>
-        </div>
-        {error && (
-          <p className="mx-auto mt-2 max-w-6xl text-xs text-red-600">{error}</p>
+          </>
+        ) : (
+          <>
+            {/* TOP - goal input */}
+            <header className="panel-bar view-enter sticky top-0 z-20 border-b px-5 py-4">
+              <div className="mx-auto flex max-w-6xl flex-wrap items-end gap-4">
+                <Brand isCalling={isCalling} showStatus />
+
+                <label className="flex flex-col gap-1.5">
+                  <span className="field-label">Number to call</span>
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+15551234567"
+                    className="field w-48"
+                  />
+                </label>
+
+                <label className="flex min-w-64 flex-1 flex-col gap-1.5">
+                  <span className="field-label">
+                    What should the call accomplish?
+                  </span>
+                  <input
+                    value={objective}
+                    onChange={(e) => setObjective(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && canStart) startCall();
+                    }}
+                    placeholder="Confirm you can hear me and ask what the weather is"
+                    className="field w-full"
+                  />
+                </label>
+
+                <button
+                  onClick={startCall}
+                  disabled={!canStart}
+                  className="btn btn-primary"
+                >
+                  {starting ? "Starting…" : "Start"}
+                </button>
+              </div>
+
+              {error && (
+                <p
+                  role="alert"
+                  className="mx-auto mt-2 max-w-6xl text-[0.92rem] text-danger"
+                >
+                  {error}
+                </p>
+              )}
+            </header>
+
+            {/* CENTER - transcript + sidebar */}
+            <main className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-5 overflow-hidden p-5 lg:grid-cols-[7fr_3fr]">
+              <div
+                ref={transcriptRef}
+                role="log"
+                aria-live="polite"
+                aria-relevant="additions"
+                aria-label="Live call transcript"
+                className="panel panel-sunken view-enter stagger-1 scroll-area flex flex-col gap-3 p-5"
+              >
+                {events.length === 0 && (
+                  <p className="m-auto max-w-sm text-center text-fg-subtle">
+                    The live transcript will appear here once the call starts.
+                  </p>
+                )}
+                {events.map((event, i) => (
+                  <Bubble
+                    key={
+                      event.type === "utterance" && event.utterance_id
+                        ? event.utterance_id
+                        : `i${i}`
+                    }
+                    event={event}
+                  />
+                ))}
+              </div>
+
+              <aside className="panel view-enter stagger-2 scroll-area p-5">
+                {summary ? (
+                  <SummaryCard summary={summary} />
+                ) : currentGoal ? (
+                  <div className="space-y-4">
+                    <h2 className="section-heading">Call goal</h2>
+                    <Field label="Calling">{currentGoal.to_number}</Field>
+                    <Field label="Objective">{currentGoal.objective}</Field>
+                    {(currentGoal.must_ask ?? []).length > 0 && (
+                      <Field label="Must ask">
+                        <ul className="list-disc space-y-1 pl-5">
+                          {(currentGoal.must_ask ?? []).map((q, i) => (
+                            <li key={i}>{q}</li>
+                          ))}
+                        </ul>
+                      </Field>
+                    )}
+                    {(currentGoal.fields_to_collect ?? []).length > 0 && (
+                      <Field label="Collecting">
+                        {(currentGoal.fields_to_collect ?? []).join(", ")}
+                      </Field>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-fg-subtle">
+                    No call yet. Enter a number and an objective above.
+                  </p>
+                )}
+              </aside>
+            </main>
+
+            {/* BOTTOM - nudge bar */}
+            <footer className="panel-bar view-enter stagger-3 sticky bottom-0 border-t px-5 py-4">
+              <div className="mx-auto flex max-w-6xl items-end gap-4">
+                <label className="flex flex-1 flex-col gap-1.5">
+                  <span className="field-label">Nudge the agent</span>
+                  <textarea
+                    value={nudgeText}
+                    onChange={(e) => setNudgeText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (isCalling) sendNudge();
+                      }
+                    }}
+                    rows={2}
+                    disabled={!isCalling}
+                    placeholder={
+                      isCalling
+                        ? "Ask them to hold - I need to check something"
+                        : "Available while a call is live"
+                    }
+                    className="field w-full resize-none"
+                  />
+                </label>
+                <button
+                  onClick={sendNudge}
+                  disabled={!isCalling || nudgeText.trim().length === 0}
+                  className="btn btn-quiet"
+                >
+                  Nudge
+                </button>
+              </div>
+            </footer>
+          </>
         )}
-      </header>
+      </div>
+    </>
+  );
+}
 
-      {/* CENTER - transcript + sidebar */}
-      <main className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-4 overflow-hidden p-4 lg:grid-cols-[7fr_3fr]">
-        <div
-          ref={transcriptRef}
-          className="flex flex-col gap-3 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-4"
-        >
-          {events.length === 0 && (
-            <p className="m-auto text-sm text-slate-400">
-              The live transcript will appear here once the call starts.
-            </p>
-          )}
-          {events.map((event, i) => (
-            <Bubble
-              key={
-                event.type === "utterance" && event.utterance_id
-                  ? event.utterance_id
-                  : `i${i}`
-              }
-              event={event}
-            />
-          ))}
-        </div>
-
-        <aside className="overflow-y-auto rounded-lg border border-slate-200 p-4">
-          {summary ? (
-            <SummaryCard summary={summary} />
-          ) : currentGoal ? (
-            <div className="space-y-3 text-sm">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Call goal
-              </h2>
-              <Field label="Calling">{currentGoal.to_number}</Field>
-              <Field label="Objective">{currentGoal.objective}</Field>
-              {(currentGoal.must_ask ?? []).length > 0 && (
-                <Field label="Must ask">
-                  <ul className="list-disc space-y-1 pl-4">
-                    {(currentGoal.must_ask ?? []).map((q, i) => (
-                      <li key={i}>{q}</li>
-                    ))}
-                  </ul>
-                </Field>
-              )}
-              {(currentGoal.fields_to_collect ?? []).length > 0 && (
-                <Field label="Collecting">
-                  {(currentGoal.fields_to_collect ?? []).join(", ")}
-                </Field>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-400">
-              No call yet. Enter a number and an objective above.
-            </p>
-          )}
-        </aside>
-      </main>
-
-      {/* BOTTOM - nudge bar */}
-      <footer className="sticky bottom-0 border-t border-slate-200 bg-white px-6 py-3">
-        <div className="mx-auto flex max-w-6xl items-end gap-3">
-          <label className="flex flex-1 flex-col text-xs font-medium text-slate-600">
-            Nudge the agent
-            <textarea
-              value={nudgeText}
-              onChange={(e) => setNudgeText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  if (isCalling) sendNudge();
-                }
-              }}
-              rows={2}
-              disabled={!isCalling}
-              placeholder={
-                isCalling
-                  ? "Ask them to hold - I need to check something"
-                  : "Available while a call is live"
-              }
-              className="mt-1 w-full resize-none rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-400"
-            />
-          </label>
-          <button
-            onClick={sendNudge}
-            disabled={!isCalling || nudgeText.trim().length === 0}
-            className="rounded bg-slate-900 px-5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
-            Nudge
-          </button>
-        </div>
-      </footer>
+function Brand({
+  isCalling,
+  showStatus,
+}: {
+  isCalling: boolean;
+  showStatus: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-[1.15rem] font-bold tracking-tight">Decibels</span>
+      {showStatus && (
+        <span className={`pill ${isCalling ? "pill-live" : "pill-idle"}`}>
+          <span className="pill-dot" aria-hidden="true" />
+          {isCalling ? "call live" : "idle"}
+        </span>
+      )}
     </div>
   );
 }
@@ -273,16 +344,16 @@ function Field({
 }) {
   return (
     <div>
-      <div className="text-xs font-medium text-slate-500">{label}</div>
-      <div className="mt-0.5 text-slate-800">{children}</div>
+      <div className="field-label">{label}</div>
+      <div className="mt-0.5">{children}</div>
     </div>
   );
 }
 
 const OUTCOME_STYLES: Record<CallSummary["outcome"], string> = {
-  succeeded: "bg-green-100 text-green-800",
-  partial: "bg-amber-100 text-amber-800",
-  failed: "bg-red-100 text-red-800",
+  succeeded: "outcome-ok",
+  partial: "outcome-warn",
+  failed: "outcome-bad",
 };
 
 function SummaryCard({ summary }: { summary: CallSummary }) {
@@ -291,29 +362,25 @@ function SummaryCard({ summary }: { summary: CallSummary }) {
 
   return (
     <div>
-      <div className="flex items-center gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Call summary
-        </h2>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="section-heading">Call summary</h2>
         <span
-          className={`rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${
-            OUTCOME_STYLES[summary.outcome] ?? "bg-slate-100 text-slate-700"
-          }`}
+          className={`pill ${OUTCOME_STYLES[summary.outcome] ?? "pill-idle"}`}
         >
           {summary.outcome}
         </span>
       </div>
 
-      <p className="mt-3 text-sm leading-relaxed text-slate-800">{summary.summary}</p>
+      <p className="mt-3 leading-relaxed">{summary.summary}</p>
 
       {collected.length > 0 && (
-        <dl className="mt-4 divide-y divide-slate-100 border-t border-slate-100">
+        <dl className="divider-top mt-4">
           {collected.map(([key, value]) => (
-            <div key={key} className="flex gap-3 py-1.5 text-sm">
-              <dt className="w-2/5 shrink-0 text-slate-500">{key}</dt>
-              <dd className="flex-1 font-medium text-slate-900">
+            <div key={key} className="divider-row flex gap-3 py-2">
+              <dt className="w-2/5 shrink-0 text-fg-muted">{key}</dt>
+              <dd className="flex-1 font-medium">
                 {value === null || value === "" ? (
-                  <span className="font-normal italic text-slate-400">not captured</span>
+                  <span className="italic text-fg-subtle">not captured</span>
                 ) : (
                   String(value)
                 )}
@@ -325,16 +392,14 @@ function SummaryCard({ summary }: { summary: CallSummary }) {
 
       {answers.length > 0 && (
         <>
-          <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Required questions
-          </h3>
-          <ul className="mt-2 space-y-2 text-sm">
+          <h3 className="section-heading mt-5">Required questions</h3>
+          <ul className="mt-2 space-y-3">
             {answers.map((qa, i) => (
               <li key={i}>
-                <div className="text-slate-500">{qa.question}</div>
-                <div className="font-medium text-slate-900">
+                <div className="text-fg-muted">{qa.question}</div>
+                <div className="font-medium">
                   {qa.answer ?? (
-                    <span className="font-normal italic text-slate-400">no answer</span>
+                    <span className="italic text-fg-subtle">no answer</span>
                   )}
                 </div>
               </li>
@@ -346,13 +411,8 @@ function SummaryCard({ summary }: { summary: CallSummary }) {
   );
 }
 
-function LiveCaret({ className }: { className: string }) {
-  return (
-    <span
-      aria-hidden
-      className={`ml-1 inline-block h-3.5 w-[2px] animate-pulse align-middle ${className}`}
-    />
-  );
+function LiveCaret() {
+  return <span aria-hidden="true" className="caret" />;
 }
 
 function Bubble({ event }: { event: RelayEvent }) {
@@ -360,52 +420,36 @@ function Bubble({ event }: { event: RelayEvent }) {
     case "utterance": {
       // Missing is_final means an older agent build that only sends finals.
       const live = event.is_final === false;
-      return event.speaker === "agent" ? (
-        <div
-          className={`max-w-[75%] self-end rounded-2xl rounded-br-sm bg-blue-500 px-4 py-2 text-sm text-white ${
-            live ? "opacity-70" : ""
-          }`}
-        >
+      const tone = event.speaker === "agent" ? "bubble-agent" : "bubble-human";
+      return (
+        <div className={`bubble ${tone} ${live ? "bubble-interim" : ""}`}>
           {event.text}
-          {live && <LiveCaret className="bg-white/80" />}
-        </div>
-      ) : (
-        <div
-          className={`max-w-[75%] self-start rounded-2xl rounded-bl-sm bg-gray-200 px-4 py-2 text-sm text-black ${
-            live ? "opacity-70" : ""
-          }`}
-        >
-          {event.text}
-          {live && <LiveCaret className="bg-slate-600" />}
+          {live && <LiveCaret />}
         </div>
       );
     }
 
     case "nudge":
       return (
-        <div className="max-w-[75%] self-end rounded-2xl border border-yellow-300 bg-yellow-100 px-4 py-2 text-sm italic text-yellow-900">
-          <span className="font-medium not-italic">you nudged the agent →</span>{" "}
+        <div className="bubble bubble-nudge">
+          <span className="font-semibold not-italic">
+            you nudged the agent →
+          </span>{" "}
           {event.text}
         </div>
       );
 
     case "dtmf":
       return (
-        <div className="self-center rounded-full bg-slate-200 px-3 py-1 font-mono text-xs text-slate-600">
-          [pressed {event.digits}]
-        </div>
+        <div className="marker-chip font-mono">[pressed {event.digits}]</div>
       );
 
     case "call_started":
-      return (
-        <div className="self-center text-xs uppercase tracking-wide text-slate-400">
-          call started
-        </div>
-      );
+      return <div className="marker">call started</div>;
 
     case "task_complete":
       return (
-        <div className="self-center rounded bg-green-50 px-3 py-1 text-xs text-green-700">
+        <div className="marker-ok">
           objective complete
           {Object.keys(event.fields).length > 0 &&
             ` - ${Object.entries(event.fields)
@@ -415,11 +459,7 @@ function Bubble({ event }: { event: RelayEvent }) {
       );
 
     case "session_end":
-      return (
-        <div className="self-center text-xs uppercase tracking-wide text-slate-400">
-          call ended - {event.reason}
-        </div>
-      );
+      return <div className="marker">call ended - {event.reason}</div>;
 
     default:
       return null;

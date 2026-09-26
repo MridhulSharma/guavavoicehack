@@ -1,26 +1,758 @@
 @import "tailwindcss";
 
+/* ===========================================================================
+   Design tokens
+   ---------------------------------------------------------------------------
+   Every colour below is a custom property so the day/night toggle only has to
+   flip one attribute on <html>. The contrast notes are measured against the
+   token the text actually sits on -- the frosted panel, never the raw shader,
+   which is why no rule paints body text straight onto the canvas. Minimums:
+   4.5:1 body text, 3:1 large text and UI edges.
+   ======================================================================== */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+
+  /* Base gradient under the WebGL canvas. Low saturation on purpose. */
+  --bg-a: #f4f7fb;
+  --bg-b: #eaf0f8;
+  --bg-c: #f6f3ee;
+
+  /* Scrim between canvas and content. Bounds how far the orb can push the
+     backdrop either way, so panel contrast holds whatever the shader does. */
+  --scrim: rgba(255, 255, 255, 0.45);
+
+  /* Frosted surfaces. */
+  --panel: rgba(255, 255, 255, 0.86);
+  --panel-strong: rgba(255, 255, 255, 0.95);
+  --panel-sunken: rgba(240, 244, 250, 0.82);
+  --panel-border: rgba(24, 40, 72, 0.14);
+  --panel-shadow: 0 1px 2px rgba(16, 28, 52, 0.05),
+    0 12px 32px -12px rgba(16, 28, 52, 0.18);
+
+  --fg: #16202e; /* 15.2:1 on --panel */
+  --fg-muted: #475467; /* 7.5:1 */
+  --fg-subtle: #5b6779; /* 5.3:1 -- still AA body text */
+
+  --accent: #2b62d9; /* --accent-fg on this: 5.4:1 */
+  --accent-fg: #ffffff;
+  --accent-hover: #1f4fba;
+  --accent-text: #1a4fc4; /* 6.4:1 on --panel */
+  --accent-soft: rgba(43, 98, 217, 0.1);
+
+  --bubble-human-bg: #e6ebf4;
+  --bubble-human-fg: #16202e; /* 13.6:1 */
+
+  --ok: #066d43; /* 5.6:1 on --panel */
+  --ok-soft: rgba(6, 109, 67, 0.12);
+  --warn: #8a5406; /* 5.3:1 */
+  --warn-soft: rgba(138, 84, 6, 0.13);
+  --danger: #b42318; /* 6.6:1 */
+  --danger-soft: rgba(180, 35, 24, 0.1);
+
+  --focus: #1a4fc4;
+
+  /* Edge aura. Warm, soft daylight. */
+  --glow-a: rgba(43, 98, 217, 0.3);
+  --glow-b: rgba(226, 142, 90, 0.26);
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --ring: 0 0 0 3px rgba(26, 79, 196, 0.36);
+}
+
+/* Night tokens: by OS preference while no explicit choice is stored... */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg-a: #0a0f1c;
+    --bg-b: #0d1424;
+    --bg-c: #131627;
+
+    --scrim: rgba(8, 11, 20, 0.55);
+
+    --panel: rgba(17, 22, 38, 0.88);
+    --panel-strong: rgba(20, 26, 44, 0.95);
+    --panel-sunken: rgba(12, 17, 30, 0.8);
+    --panel-border: rgba(150, 175, 220, 0.18);
+    --panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.4),
+      0 16px 40px -14px rgba(0, 0, 0, 0.65);
+
+    --fg: #eef2f8; /* 13.9:1 on --panel */
+    --fg-muted: #b3bfd4; /* 8.4:1 */
+    --fg-subtle: #97a4bb; /* 6.2:1 */
+
+    --accent: #3567d6; /* --accent-fg on this: 5.1:1 */
+    --accent-fg: #ffffff;
+    --accent-hover: #4478ea;
+    --accent-text: #9ebcff; /* 9.3:1 on --panel */
+    --accent-soft: rgba(110, 152, 255, 0.16);
+
+    --bubble-human-bg: #242d45;
+    --bubble-human-fg: #eef2f8; /* 11.2:1 */
+
+    --ok: #6ede9f; /* 9.9:1 on --panel */
+    --ok-soft: rgba(110, 222, 159, 0.14);
+    --warn: #fbd07f; /* 11.3:1 */
+    --warn-soft: rgba(251, 208, 127, 0.14);
+    --danger: #ffb3a7; /* 8.5:1 */
+    --danger-soft: rgba(255, 138, 120, 0.15);
+
+    --focus: #9ebcff;
+
+    --glow-a: rgba(94, 140, 255, 0.4);
+    --glow-b: rgba(126, 231, 214, 0.28);
+
+    --ring: 0 0 0 3px rgba(158, 188, 255, 0.45);
+  }
+}
+
+/* ...and unconditionally when the toggle asks for night. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-a: #0a0f1c;
+  --bg-b: #0d1424;
+  --bg-c: #131627;
+
+  --scrim: rgba(8, 11, 20, 0.55);
+
+  --panel: rgba(17, 22, 38, 0.88);
+  --panel-strong: rgba(20, 26, 44, 0.95);
+  --panel-sunken: rgba(12, 17, 30, 0.8);
+  --panel-border: rgba(150, 175, 220, 0.18);
+  --panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.4),
+    0 16px 40px -14px rgba(0, 0, 0, 0.65);
+
+  --fg: #eef2f8;
+  --fg-muted: #b3bfd4;
+  --fg-subtle: #97a4bb;
+
+  --accent: #3567d6;
+  --accent-fg: #ffffff;
+  --accent-hover: #4478ea;
+  --accent-text: #9ebcff;
+  --accent-soft: rgba(110, 152, 255, 0.16);
+
+  --bubble-human-bg: #242d45;
+  --bubble-human-fg: #eef2f8;
+
+  --ok: #6ede9f;
+  --ok-soft: rgba(110, 222, 159, 0.14);
+  --warn: #fbd07f;
+  --warn-soft: rgba(251, 208, 127, 0.14);
+  --danger: #ffb3a7;
+  --danger-soft: rgba(255, 138, 120, 0.15);
+
+  --focus: #9ebcff;
+
+  --glow-a: rgba(94, 140, 255, 0.4);
+  --glow-b: rgba(126, 231, 214, 0.28);
+
+  --ring: 0 0 0 3px rgba(158, 188, 255, 0.45);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ===========================================================================
+   Base
+   ======================================================================== */
+
+/* 17px root: the transcript has to read from the back of a room, and every
+   rem-based Tailwind size and gap scales with it. */
+html {
+  font-size: 106.25%;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100%;
+  /* Also painted here, not only on the backdrop layer, so a WebGL failure or
+     the frame before the canvas mounts still shows the themed gradient. */
+  background-color: var(--bg-b);
+  background-image: linear-gradient(
+    160deg,
+    var(--bg-a) 0%,
+    var(--bg-b) 52%,
+    var(--bg-c) 100%
+  );
+  background-attachment: fixed;
+  color: var(--fg);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  transition: background-color 600ms ease, color 600ms ease;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* ===========================================================================
+   Backdrop stack: canvas (0) -> scrim (1) -> aura (2) -> content (10)
+   ======================================================================== */
+
+.backdrop-canvas,
+.backdrop-scrim,
+.edge-glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.backdrop-canvas {
+  z-index: 0;
+}
+
+.backdrop-scrim {
+  z-index: 1;
+  background: var(--scrim);
+  transition: background-color 600ms ease;
+}
+
+.app-shell {
+  position: relative;
+  z-index: 10;
+}
+
+/* ===========================================================================
+   Edge aura. Only opacity animates, so this stays off the paint path; the
+   inset shadows themselves are static.
+   ======================================================================== */
+
+.edge-glow {
+  z-index: 2;
+  box-shadow: inset 0 0 90px -10px var(--glow-a),
+    inset 0 0 220px 30px var(--glow-b);
+  transition: box-shadow 600ms ease;
+  animation: aura-breathe 9s ease-in-out infinite;
+}
+
+.edge-glow[data-live="true"] {
+  animation-name: aura-breathe-live;
+  animation-duration: 3.4s;
+}
+
+@keyframes aura-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes aura-breathe-live {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ===========================================================================
+   Frosted surfaces
+   ======================================================================== */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(22px) saturate(1.5);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  transition: background-color 600ms ease, border-color 600ms ease;
+}
+
+.panel-bar {
+  background: var(--panel-strong);
+  border-color: var(--panel-border);
+  backdrop-filter: blur(22px) saturate(1.5);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  transition: background-color 600ms ease, border-color 600ms ease;
+}
+
+.panel-sunken {
+  background: var(--panel-sunken);
+}
+
+/* ===========================================================================
+   Controls. Every interactive target clears 44px.
+   ======================================================================== */
+
+.field-label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--fg-muted);
+}
+
+.field {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.6rem 0.85rem;
+  color: var(--fg);
+  background: var(--panel-strong);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease,
+    background-color 600ms ease;
+}
+
+.field::placeholder {
+  color: var(--fg-subtle);
+  opacity: 1;
+}
+
+.field:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--panel-border));
+}
+
+.field:focus-visible {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+  outline: none;
+}
+
+.field:disabled {
+  background: var(--panel-sunken);
+  color: var(--fg-subtle);
+  cursor: not-allowed;
+}
+
+.field-lg {
+  min-height: 60px;
+  padding: 0.9rem 1.1rem;
+  font-size: 1.12rem;
+  border-radius: var(--radius);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.6rem 1.35rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn-quiet {
+  background: var(--panel-strong);
+  color: var(--fg);
+  border-color: var(--panel-border);
+}
+
+.btn-quiet:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--panel-border));
+}
+
+.btn:disabled {
+  background: var(--panel-sunken);
+  color: var(--fg-subtle);
+  border-color: var(--panel-border);
+  cursor: not-allowed;
+}
+
+.btn-lg {
+  min-height: 56px;
+  padding: 0.85rem 1.75rem;
+  font-size: 1.06rem;
+  border-radius: var(--radius);
+}
+
+/* Theme switch. The knob and icons are driven by [data-theme], not React
+   state, so the pre-paint bootstrap renders them correctly with no flash. */
+.theme-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 44px;
+  padding: 0.35rem 0.85rem 0.35rem 0.5rem;
+  background: var(--panel-strong);
+  color: var(--fg);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 600ms ease;
+}
+
+.theme-switch:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--panel-border));
+}
+
+.theme-switch-track {
+  position: relative;
+  flex: none;
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid var(--panel-border);
+}
+
+.theme-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  transition: transform 300ms cubic-bezier(0.3, 0.8, 0.3, 1);
+}
+
+:root[data-theme="dark"] .theme-switch-knob {
+  transform: translateX(20px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-switch-knob {
+    transform: translateX(20px);
+  }
+}
+
+/* One icon and one word per theme; CSS picks, so nothing is needed from JS
+   before it hydrates. */
+.icon-day,
+.icon-night {
+  width: 13px;
+  height: 13px;
+}
+
+.icon-night,
+.icon-night-label,
+:root[data-theme="dark"] .icon-day,
+:root[data-theme="dark"] .icon-day-label {
+  display: none;
+}
+
+:root[data-theme="dark"] .icon-night {
+  display: block;
+}
+
+:root[data-theme="dark"] .icon-night-label {
+  display: inline;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .icon-day,
+  :root:not([data-theme="light"]) .icon-day-label {
+    display: none;
+  }
+  :root:not([data-theme="light"]) .icon-night {
+    display: block;
+  }
+  :root:not([data-theme="light"]) .icon-night-label {
+    display: inline;
+  }
+}
+
+/* ===========================================================================
+   Status pill
+   ======================================================================== */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pill-live {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.pill-idle {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.pill-live .pill-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+.outcome-ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.outcome-warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.outcome-bad {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* ===========================================================================
+   Sidebar / summary
+   ======================================================================== */
+
+.section-heading {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.divider-top {
+  border-top: 1px solid var(--panel-border);
+}
+
+.divider-row + .divider-row {
+  border-top: 1px solid var(--panel-border);
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* ===========================================================================
+   Transcript
+   ======================================================================== */
+
+.bubble {
+  max-width: min(72ch, 78%);
+  padding: 0.7rem 1.05rem;
+  border-radius: 20px;
+  /* Large text: the projector-legibility target for the room. */
+  font-size: 1.12rem;
+  line-height: 1.55;
+  transition: opacity 200ms ease;
+  animation: bubble-in 320ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
+}
+
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.bubble-agent {
+  align-self: flex-end;
+  border-bottom-right-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.bubble-human {
+  align-self: flex-start;
+  border-bottom-left-radius: 6px;
+  background: var(--bubble-human-bg);
+  color: var(--bubble-human-fg);
+}
+
+.bubble-interim {
+  opacity: 0.75;
+}
+
+.bubble-nudge {
+  align-self: flex-end;
+  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-style: italic;
+}
+
+.marker {
+  align-self: center;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+
+.marker-chip {
+  align-self: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: var(--panel-sunken);
+  border: 1px solid var(--panel-border);
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+}
+
+.marker-ok {
+  align-self: center;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 0.25rem;
+  vertical-align: text-bottom;
+  background: currentColor;
+  animation: caret-blink 1.1s step-end infinite;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+/* ===========================================================================
+   Landing <-> app transition: a gentle float + fade.
+   ======================================================================== */
+
+.view-enter {
+  animation: float-in 520ms cubic-bezier(0.22, 0.85, 0.28, 1) both;
+}
+
+/* Staggered so the heading settles just before its controls do. */
+.stagger-1 {
+  animation-delay: 60ms;
+}
+.stagger-2 {
+  animation-delay: 140ms;
+}
+.stagger-3 {
+  animation-delay: 220ms;
+}
+
+@keyframes float-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.hero-title {
+  font-size: clamp(2rem, 5.2vw, 3.4rem);
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.hero-sub {
+  font-size: 1.12rem;
+  line-height: 1.6;
+  color: var(--fg-muted);
+  text-wrap: pretty;
+}
+
+.scroll-area {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--panel-border) transparent;
+}
+
+/* ===========================================================================
+   Reduced motion. Nothing gated here is load-bearing, so it all stops; the
+   orb and the aura are frozen from JS as well.
+   ======================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    /* Zeroed too: the stagger classes combine a delay with `both` fill, so a
+       delay left standing would hold those panels at opacity 0. */
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .edge-glow,
+  .edge-glow[data-live="true"] {
+    animation: none !important;
+    opacity: 0.5;
+  }
 }
