@@ -1,10 +1,20 @@
 # RelayPro
+
+# Secrets — never commit real env files (any depth)
 .env
 .env.local
-relaypro-agent/.env
-relaypro-web/.env
+.env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+!.env.example
+!**/.env.example
+
+# Build output / deps
 relaypro-web/.next/
 relaypro-web/node_modules/
+relaypro-web/next-env.d.ts
+relaypro-web/tsconfig.tsbuildinfo
 relaypro-agent/__pycache__/
 relaypro-agent/.venv/
 __pycache__/
